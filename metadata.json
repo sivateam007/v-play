@@ -1,0 +1,6 @@
+{
+  "name": "Video Player",
+  "description": "A feature-rich video player supporting gesture controls, custom playlists, adjustable playback speeds, and aspect ratios.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
