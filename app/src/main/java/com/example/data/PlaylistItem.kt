@@ -12,7 +12,9 @@ data class PlaylistItem(
     val duration: Long = 0, // Duration in milliseconds
     val lastPosition: Long = 0, // Resume seek position in milliseconds
     val isFavorite: Boolean = false,
-    val dateAdded: Long = System.currentTimeMillis()
+    val dateAdded: Long = System.currentTimeMillis(),
+    val folder: String = "Movies",
+    val lastPlayedTime: Long = 0
 ) {
     // Utility to get nice displayable duration
     fun formatDuration(): String {

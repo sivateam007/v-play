@@ -6,6 +6,9 @@ import android.media.AudioManager
 import android.media.MediaPlayer
 import android.net.Uri
 import android.widget.VideoView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -48,6 +51,7 @@ fun CustomVideoPlayer(
     onBack: () -> Unit,
     onPlayNext: () -> Unit,
     onPlayPrevious: () -> Unit,
+    onDeleteVideo: (PlaylistItem) -> Unit,
     repeatMode: Int, // 0 = Off, 1 = Repeat All, 2 = Repeat One
     onRepeatModeChanged: (Int) -> Unit,
     isShuffleEnabled: Boolean,
@@ -80,6 +84,15 @@ fun CustomVideoPlayer(
     var selectedLanguage by remember { mutableStateOf("English (SRT Subtitles)") }
     var audioTrackMenuExpanded by remember { mutableStateOf(false) }
     var languageMenuExpanded by remember { mutableStateOf(false) }
+
+    // Full screen state
+    var isFullscreenMode by remember { mutableStateOf(false) }
+
+    // Unified rotation mode state: "sensor" (auto rotate), "portrait", "landscape"
+    var rotationMode by remember { mutableStateOf(if (activity?.requestedOrientation == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE) "landscape" else if (activity?.requestedOrientation == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) "portrait" else "sensor") }
+
+    // Delete confirmation state
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
     // A-B Repeat Loop points
     var pointA by remember { mutableStateOf<Long?>(null) }
@@ -198,14 +211,39 @@ fun CustomVideoPlayer(
         }
     }
 
-    fun toggleOrientation() {
+    fun cycleRotationMode() {
         activity?.let { act ->
-            if (isLandscapeMode) {
-                act.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                isLandscapeMode = false
+            when (rotationMode) {
+                "sensor" -> {
+                    act.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    rotationMode = "portrait"
+                    isLandscapeMode = false
+                }
+                "portrait" -> {
+                    act.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    rotationMode = "landscape"
+                    isLandscapeMode = true
+                }
+                else -> {
+                    act.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR
+                    rotationMode = "sensor"
+                    isLandscapeMode = false
+                }
+            }
+        }
+    }
+
+    fun toggleFullscreen() {
+        activity?.let { act ->
+            val window = act.window
+            val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+            if (isFullscreenMode) {
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+                isFullscreenMode = false
             } else {
-                act.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                isLandscapeMode = true
+                insetsController.hide(WindowInsetsCompat.Type.systemBars())
+                insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                isFullscreenMode = true
             }
         }
     }
@@ -214,6 +252,12 @@ fun CustomVideoPlayer(
         onDispose {
             // Restore initial screen orientation when returning to Library list
             activity?.requestedOrientation = initialOrientation
+            // Restoring system status / navigation bars
+            activity?.let { act ->
+                val window = act.window
+                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
 
@@ -607,6 +651,18 @@ fun CustomVideoPlayer(
                     )
                 }
 
+                // Delete current video
+                IconButton(
+                    onClick = { showDeleteConfirmDialog = true },
+                    modifier = Modifier.testTag("delete_current_video_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete current video",
+                        tint = Color.Red.copy(alpha = 0.85f)
+                    )
+                }
+
                 // Sleep Timer Display Status
                 if (sleepMinutesLeft != null) {
                     Box(
@@ -882,15 +938,52 @@ fun CustomVideoPlayer(
                         }
                     }
 
-                    // Orientation Landscape view toggler
+                    // Rotation Landscape/Portrait/Auto-Rotate view toggler
                     AssistChip(
-                        onClick = { toggleOrientation() },
-                        label = { Text(if (isLandscapeMode) "View: Landscape" else "View: Portrait") },
-                        leadingIcon = { Icon(Icons.Default.ScreenRotation, null, modifier = Modifier.size(16.dp)) },
+                        onClick = { cycleRotationMode() },
+                        label = {
+                            Text(
+                                "Rotation: " + when (rotationMode) {
+                                    "portrait" -> "Portrait"
+                                    "landscape" -> "Landscape"
+                                    else -> "Auto-Rotate"
+                                }
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = when (rotationMode) {
+                                    "portrait" -> Icons.Default.StayCurrentPortrait
+                                    "landscape" -> Icons.Default.StayCurrentLandscape
+                                    else -> Icons.Default.ScreenRotation
+                                },
+                                contentDescription = "Rotation Mode",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
                         colors = AssistChipDefaults.assistChipColors(
                             labelColor = Color.White,
                             leadingIconContentColor = MaterialTheme.colorScheme.primary
-                        )
+                        ),
+                        modifier = Modifier.testTag("rotation_cycle_chip")
+                    )
+
+                    // True Full Screen toggle chip
+                    AssistChip(
+                        onClick = { toggleFullscreen() },
+                        label = { Text(if (isFullscreenMode) "Screen: Full Screen" else "Screen: Standard") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (isFullscreenMode) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                contentDescription = "Toggle Fullscreen Mode",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            labelColor = Color.White,
+                            leadingIconContentColor = MaterialTheme.colorScheme.primary
+                        ),
+                        modifier = Modifier.testTag("fullscreen_toggle_chip")
                     )
 
                     // Audio Track selector menu
@@ -1188,6 +1281,47 @@ fun CustomVideoPlayer(
                     }
                 }
             }
+        }
+
+        if (showDeleteConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirmDialog = false },
+                title = {
+                    Text(
+                        text = "Delete Video?",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Are you sure you want to remove \"${item.title}\" from your playlist? This action cannot be undone.",
+                        color = Color.Gray,
+                        fontSize = 14.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showDeleteConfirmDialog = false
+                            onDeleteVideo(item)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.testTag("confirm_delete_video_button")
+                    ) {
+                        Text("Delete", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showDeleteConfirmDialog = false },
+                        modifier = Modifier.testTag("dismiss_delete_video_button")
+                    ) {
+                        Text("Cancel", color = Color.White)
+                    }
+                },
+                containerColor = CharcoalGray
+            )
         }
     }
 }

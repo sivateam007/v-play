@@ -21,6 +21,18 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
     val favorites: StateFlow<List<PlaylistItem>> = repository.favoriteItems
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // All videos
+    val allVideos: StateFlow<List<PlaylistItem>> = repository.allVideos
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Recently played
+    val recentlyPlayed: StateFlow<List<PlaylistItem>> = repository.allVideos
+        .map { videos ->
+            videos.filter { it.lastPlayedTime > 0 }
+                .sortedByDescending { it.lastPlayedTime }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // Current playlist selection
     private val _selectedPlaylistId = MutableStateFlow<Int?>(null)
     val selectedPlaylistId = _selectedPlaylistId.asStateFlow()
@@ -80,6 +92,7 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         item?.let {
             _selectedPlaylistId.value = it.playlistId
             viewModelScope.launch {
+                repository.updateLastPlayedTime(it.id, System.currentTimeMillis())
                 val dbItem = repository.getItemById(it.id)
                 if (dbItem != null) {
                     // Update latest position from database for resume!
@@ -113,11 +126,25 @@ class VideoPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun addVideoToPlaylist(playlistId: Int, title: String, url: String) {
+    fun addVideoToPlaylist(playlistId: Int, title: String, url: String, folder: String = "Downloads") {
         viewModelScope.launch {
-            val newItem = PlaylistItem(playlistId = playlistId, title = title, url = url)
+            val newItem = PlaylistItem(playlistId = playlistId, title = title, url = url, folder = folder)
             repository.insertPlaylistItem(newItem)
             // If the selected playlist is active, reload queue
+            if (_selectedPlaylistId.value == playlistId) {
+                repository.getItemsForPlaylist(playlistId).first().let { items ->
+                    _playbackQueue.value = if (_isShuffleEnabled.value) items.shuffled() else items
+                }
+            }
+        }
+    }
+
+    fun addMultipleVideosToPlaylist(playlistId: Int, videosList: List<Triple<String, String, String>>) {
+        viewModelScope.launch {
+            videosList.forEach { (title, url, folder) ->
+                val newItem = PlaylistItem(playlistId = playlistId, title = title, url = url, folder = folder)
+                repository.insertPlaylistItem(newItem)
+            }
             if (_selectedPlaylistId.value == playlistId) {
                 repository.getItemsForPlaylist(playlistId).first().let { items ->
                     _playbackQueue.value = if (_isShuffleEnabled.value) items.shuffled() else items

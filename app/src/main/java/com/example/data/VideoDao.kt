@@ -51,4 +51,10 @@ interface VideoDao {
 
     @Query("UPDATE playlist_items SET isFavorite = :isFav WHERE id = :id")
     suspend fun updateFavoriteStatus(id: Int, isFav: Boolean)
+
+    @Query("SELECT * FROM playlist_items ORDER BY dateAdded DESC")
+    fun getAllVideos(): Flow<List<PlaylistItem>>
+
+    @Query("UPDATE playlist_items SET lastPlayedTime = :time WHERE id = :id")
+    suspend fun updateLastPlayedTime(id: Int, time: Long)
 }

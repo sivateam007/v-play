@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
                         onBack = { playerViewModel.setPlayingItem(null) },
                         onPlayNext = { playerViewModel.playNext() },
                         onPlayPrevious = { playerViewModel.playPrevious() },
+                        onDeleteVideo = { video -> playerViewModel.removeVideoFromPlaylist(video) },
                         repeatMode = repeatMode,
                         onRepeatModeChanged = { playerViewModel.setRepeatMode(it) },
                         isShuffleEnabled = isShuffleEnabled,
